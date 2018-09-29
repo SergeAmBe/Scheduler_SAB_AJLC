@@ -8,14 +8,13 @@
 #ifndef SCHDLR_SAB_H_
 #define SCHDLR_SAB_H_
 
-#include <string.h>
 #include "MKL25Z4.h"
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
 #define SCHDLR_CONFIG_MAX_TASKS	32
-#define TASK_STACK_SIZE			256
+#define TASK_STACK_SIZE			64
 
 /*! @brief  Schdlr status return codes. */
 typedef enum{

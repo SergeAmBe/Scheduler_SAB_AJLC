@@ -5,7 +5,9 @@
  *      Author: Sergio Amador Benet
  */
 
-#include <Schdlr_SAB.h>
+#include <string.h>
+#include "Schdlr_SAB.h"
+#include "MKL25Z4.h"
 
 /*******************************************************************************
 * Prototypes
@@ -45,7 +47,7 @@ struct xTaskCntrlDescriptor{
 	volatile uint32_t uwSP;
 	void (*handler)(void *vpParams);
 	void *pParams;
-	volatile enum SchdlrTaskStatus xStatus;
+	enum SchdlrTaskStatus xStatus;
 	SchdlrPriority uwTaskPriorty;
 };
 
@@ -54,7 +56,7 @@ struct xTaskCntrlDescriptor{
  */
 static struct{
 	struct xTaskCntrlDescriptor xaTasks[SCHDLR_CONFIG_MAX_TASKS];
-	volatile uint32_t uwCurrentTask;
+	uint32_t uwCurrentTask;
 	uint32_t uwSize;
 }xSchdlrQueue;
 
@@ -189,7 +191,7 @@ SchdlrRetStatus_t Schdlr_xfnStart(void)
 		return Schdlr_Ret_False;
 	}
 
-	NVIC_SetPriority(PendSV_IRQn, 0xff); /* Lowest possible priority */
+	//NVIC_SetPriority(PendSV_IRQn, 0xff); /* Lowest possible priority */
 
 	xpSchdlrCurrTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
 	SchdlrState = Schdlr_State_Started;
@@ -221,24 +223,25 @@ void Schdlr_xfnSchdlr(void)
 	{
 		xSchdlrQueue.uwCurrentTask = 0;
 	}
-
 	xpSchdlrNextTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
 	xpSchdlrNextTask->xStatus = Schdlr_Task_Status_Runnig;
 }
 
 /*!
  * @brief This function calls the scheduler to see which is the next task to run
- * and forces a Context Switch, inline modifier so to not mess up the current task
- *  proper context.
+ * and forces a Context Switch.
  *
  * @param None
  *
  * @return None
  */
+#define SCB_ICSR_PENDSV_ADDRESS 0xe000ed04
+volatile uint32_t * ScbIcsr = (volatile uint32_t *)SCB_ICSR_PENDSV_ADDRESS;
 void Schdlr_xfnTaskYield(void)
 {
 	Schdlr_xfnSchdlr();
-	SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
+	*ScbIcsr |= SCB_ICSR_PENDSVSET_Msk;
+	//SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 }
 
 /*!
