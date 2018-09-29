@@ -34,7 +34,7 @@ int main(void) {
     //PRINTF("Hello World\n");
     Schdlr_xfnInit();
     Schdlr_xfnTaskCreate(svfnRedLedTask, NULL, uwRedLedStack, sizeof(uwRedLedStack), 1);
-    Schdlr_xfnTaskCreate(svfnGreenLedTask, NULL, uwRedLedStack, sizeof(uwGreenLedStack), 2);
+    Schdlr_xfnTaskCreate(svfnGreenLedTask, NULL, uwGreenLedStack, sizeof(uwGreenLedStack), 2);
     Schdlr_xfnStart();
 
     while(1);

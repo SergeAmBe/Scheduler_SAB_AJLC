@@ -191,7 +191,7 @@ SchdlrRetStatus_t Schdlr_xfnStart(void)
 		return Schdlr_Ret_False;
 	}
 
-	//NVIC_SetPriority(PendSV_IRQn, 0xff); /* Lowest possible priority */
+	NVIC_SetPriority(PendSV_IRQn, 0xff); /* Lowest possible priority */
 
 	xpSchdlrCurrTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
 	SchdlrState = Schdlr_State_Started;
