@@ -7,7 +7,6 @@
 
 #include <string.h>
 #include "Schdlr_SAB.h"
-#include "MKL25Z4.h"
 
 /*******************************************************************************
 * Prototypes
@@ -21,9 +20,9 @@ void Schdlr_xfnSchdlr(void);
  * @brief Tasks current status
  */
 enum SchdlrTaskStatus{
+	Schdlr_Task_Status_Blocked = 0,
 	Schdlr_Task_Status_Ready = 1,
-	Schdlr_Task_Status_Runnig,
-	Schdlr_Task_Status_Blocked
+	Schdlr_Task_Status_Runnig
 };
 
 /*******************************************************************************
@@ -47,8 +46,7 @@ struct xTaskCntrlDescriptor{
 	volatile uint32_t uwSP;
 	void (*handler)(void *vpParams);
 	void *pParams;
-	enum SchdlrTaskStatus xStatus;
-	SchdlrPriority uwTaskPriorty;
+	uint32_t uwTaskStatus;
 };
 
 /*!
@@ -58,6 +56,7 @@ static struct{
 	struct xTaskCntrlDescriptor xaTasks[SCHDLR_CONFIG_MAX_TASKS];
 	uint32_t uwCurrentTask;
 	uint32_t uwSize;
+	uint32_t uwTaskPriorty;
 }xSchdlrQueue;
 
 volatile struct xTaskCntrlDescriptor *xpSchdlrCurrTask;
@@ -102,7 +101,7 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreate(void (*vpfnhandler)(void *vpParams),
 									   void *vpTaskParams,
 									   uint32_t *uwpStack,
 									   uint32_t uwStackSize,
-									   SchdlrPriority uwPriority)
+									   uint32_t uwPriority)
 {
 	if(SchdlrState != Schdlr_State_Initialized && SchdlrState != Schdlr_State_Tasks_Initialized)
 	{
@@ -123,8 +122,8 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreate(void (*vpfnhandler)(void *vpParams),
 	pxTask->handler = vpfnhandler;
 	pxTask->pParams = vpTaskParams;
 	pxTask->uwSP = (uint32_t)(uwpStack + uwStackOffset - 16);
-	pxTask->xStatus = Schdlr_Task_Status_Ready;
-	pxTask->uwTaskPriorty = uwPriority;
+	pxTask->uwTaskStatus |= (uwPriority);
+	xSchdlrQueue.uwTaskPriorty |= (uwPriority);
 
 	SchdlrState = Schdlr_State_Tasks_Initialized;
 	xSchdlrQueue.uwSize++;
@@ -147,7 +146,7 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreateBlocked(void (*vpfnhandler)(void *vpParams
 									   void *vpTaskParams,
 									   uint32_t *uwpStack,
 									   uint32_t uwStackSize,
-									   SchdlrPriority uwPriority)
+									   uint32_t uwPriority)
 {
 	if(SchdlrState != Schdlr_State_Initialized && SchdlrState != Schdlr_State_Tasks_Initialized)
 	{
@@ -168,8 +167,8 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreateBlocked(void (*vpfnhandler)(void *vpParams
 	pxTask->handler = vpfnhandler;
 	pxTask->pParams = vpTaskParams;
 	pxTask->uwSP = (uint32_t)(uwpStack + uwStackOffset - 16);
-	pxTask->xStatus = Schdlr_Task_Status_Blocked;
-	pxTask->uwTaskPriorty = uwPriority;
+	pxTask->uwTaskStatus &= ~(uwPriority);
+	xSchdlrQueue.uwTaskPriorty |= (uwPriority);
 
 	SchdlrState = Schdlr_State_Tasks_Initialized;
 	xSchdlrQueue.uwSize++;
@@ -216,7 +215,7 @@ SchdlrRetStatus_t Schdlr_xfnStart(void)
 void Schdlr_xfnSchdlr(void)
 {
 	xpSchdlrCurrTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
-	xpSchdlrCurrTask->xStatus = Schdlr_Task_Status_Ready;
+	//xpSchdlrCurrTask->uwTaskPriorty = Schdlr_Task_Status_Ready;
 
 	xSchdlrQueue.uwCurrentTask++;
 	if(xSchdlrQueue.uwCurrentTask >= xSchdlrQueue.uwSize)
@@ -224,7 +223,7 @@ void Schdlr_xfnSchdlr(void)
 		xSchdlrQueue.uwCurrentTask = 0;
 	}
 	xpSchdlrNextTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
-	xpSchdlrNextTask->xStatus = Schdlr_Task_Status_Runnig;
+	//xpSchdlrNextTask->uwTaskPriorty = Schdlr_Task_Status_Runnig;
 }
 
 /*!
@@ -257,7 +256,6 @@ __attribute__ (( naked )) void PendSV_Handler(void)
 	__asm volatile
 	(
 		"	.syntax unified						\n"
-		"	cpsid	i							\n"
 		"	push 	{r4-r7}						\n"
 		"	mov		r4,r8						\n"
 		"   mov		r5,r9						\n"
@@ -279,7 +277,6 @@ __attribute__ (( naked )) void PendSV_Handler(void)
 		"   mov		r11,r7						\n"
 		"   pop		{r4-r7}						\n"
 		"   ldr		r0, =0xFFFFFFFD				\n"
-		"   cpsie	i							\n"
 		"   bx		r0							\n"
 		"	.align 4							\n"
 		"	AsmxpSchdlrCurrTask: .word xpSchdlrCurrTask	\n"
