@@ -12,6 +12,7 @@
 * Prototypes
 ******************************************************************************/
 void Schdlr_xfnSchdlr(void);
+uint32_t Schdlr_uwfnFindFirstSet(uint32_t uwTaskPriorty, uint32_t uwTaskStatus);
 
 /*******************************************************************************
  * Definitions
@@ -25,6 +26,9 @@ enum SchdlrTaskStatus{
 	Schdlr_Task_Status_Runnig
 };
 
+#define HIGHEST_PRIORITY_BIT (1<<31)
+#define ALL_STATUS_BITS (0xFFFFFFFF)
+#define ERROR_TASKPRIORITY (0xFFFFFFFF);
 /*******************************************************************************
  * Variables
  ******************************************************************************/
@@ -46,7 +50,6 @@ struct xTaskCntrlDescriptor{
 	volatile uint32_t uwSP;
 	void (*handler)(void *vpParams);
 	void *pParams;
-	uint32_t uwTaskStatus;
 };
 
 /*!
@@ -57,6 +60,7 @@ static struct{
 	uint32_t uwCurrentTask;
 	uint32_t uwSize;
 	uint32_t uwTaskPriorty;
+	uint32_t uwTaskStatus;
 }xSchdlrQueue;
 
 volatile struct xTaskCntrlDescriptor *xpSchdlrCurrTask;
@@ -107,26 +111,21 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreate(void (*vpfnhandler)(void *vpParams),
 	{
 		return Schdlr_Ret_False;
 	}
-	if(xSchdlrQueue.uwSize >= SCHDLR_CONFIG_MAX_TASKS - 1)
-	{
-		return Schdlr_Ret_False;
-	}
 	if(uwStackSize % sizeof(uint32_t) != 0)
 	{
 		return Schdlr_Ret_False;
 	}
 
 	uint32_t uwStackOffset = (uwStackSize/sizeof(uint32_t));
-
+	xSchdlrQueue.uwSize = Schdlr_uwfnFindFirstSet(uwPriority,ALL_STATUS_BITS);
 	struct xTaskCntrlDescriptor *pxTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwSize];
 	pxTask->handler = vpfnhandler;
 	pxTask->pParams = vpTaskParams;
 	pxTask->uwSP = (uint32_t)(uwpStack + uwStackOffset - 16);
-	pxTask->uwTaskStatus |= (uwPriority);
+	xSchdlrQueue.uwTaskStatus |= (uwPriority);
 	xSchdlrQueue.uwTaskPriorty |= (uwPriority);
 
 	SchdlrState = Schdlr_State_Tasks_Initialized;
-	xSchdlrQueue.uwSize++;
 
 	return Schdlr_Ret_True;
 }
@@ -152,10 +151,6 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreateBlocked(void (*vpfnhandler)(void *vpParams
 	{
 		return Schdlr_Ret_False;
 	}
-	if(xSchdlrQueue.uwSize >= SCHDLR_CONFIG_MAX_TASKS - 1)
-	{
-		return Schdlr_Ret_False;
-	}
 	if(uwStackSize % sizeof(uint32_t) != 0)
 	{
 		return Schdlr_Ret_False;
@@ -163,11 +158,12 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreateBlocked(void (*vpfnhandler)(void *vpParams
 
 	uint32_t uwStackOffset = (uwStackSize/sizeof(uint32_t));
 
+	xSchdlrQueue.uwSize = Schdlr_uwfnFindFirstSet(uwPriority,ALL_STATUS_BITS);
 	struct xTaskCntrlDescriptor *pxTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwSize];
 	pxTask->handler = vpfnhandler;
 	pxTask->pParams = vpTaskParams;
 	pxTask->uwSP = (uint32_t)(uwpStack + uwStackOffset - 16);
-	pxTask->uwTaskStatus &= ~(uwPriority);
+	xSchdlrQueue.uwTaskStatus &= ~(uwPriority);
 	xSchdlrQueue.uwTaskPriorty |= (uwPriority);
 
 	SchdlrState = Schdlr_State_Tasks_Initialized;
@@ -192,6 +188,7 @@ SchdlrRetStatus_t Schdlr_xfnStart(void)
 
 	NVIC_SetPriority(PendSV_IRQn, 0xff); /* Lowest possible priority */
 
+	xSchdlrQueue.uwCurrentTask = Schdlr_uwfnFindFirstSet(xSchdlrQueue.uwTaskPriorty, xSchdlrQueue.uwTaskStatus);
 	xpSchdlrCurrTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
 	SchdlrState = Schdlr_State_Started;
 
@@ -215,15 +212,8 @@ SchdlrRetStatus_t Schdlr_xfnStart(void)
 void Schdlr_xfnSchdlr(void)
 {
 	xpSchdlrCurrTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
-	//xpSchdlrCurrTask->uwTaskPriorty = Schdlr_Task_Status_Ready;
-
-	xSchdlrQueue.uwCurrentTask++;
-	if(xSchdlrQueue.uwCurrentTask >= xSchdlrQueue.uwSize)
-	{
-		xSchdlrQueue.uwCurrentTask = 0;
-	}
+	xSchdlrQueue.uwCurrentTask = Schdlr_uwfnFindFirstSet(xSchdlrQueue.uwTaskPriorty, xSchdlrQueue.uwTaskStatus);
 	xpSchdlrNextTask = &xSchdlrQueue.xaTasks[xSchdlrQueue.uwCurrentTask];
-	//xpSchdlrNextTask->uwTaskPriorty = Schdlr_Task_Status_Runnig;
 }
 
 /*!
@@ -241,6 +231,19 @@ void Schdlr_xfnTaskYield(void)
 	Schdlr_xfnSchdlr();
 	*ScbIcsr |= SCB_ICSR_PENDSVSET_Msk;
 	//SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
+}
+
+/*!
+ * @brief It blocks a task by clearing its bit mask
+ *
+ * @param The task to block using TaskPriority_t mask
+ *
+ * @return None
+ */
+void Schdlr_xfnTaskBlock(uint32_t uwTaskToBlock)
+{
+	xSchdlrQueue.uwTaskStatus &= ~(uwTaskToBlock);
+	Schdlr_xfnTaskYield();
 }
 
 /*!
@@ -283,4 +286,30 @@ __attribute__ (( naked )) void PendSV_Handler(void)
 		"	.align 4							\n"
 		"	AsmxpSchdlrNextTask: .word xpSchdlrNextTask	\n"
 	);
+}
+
+/*!
+ * @brief Finds the first MSbit that is in ready state(1) and reference to task priority (1),
+ * also works for general purpose FindFirstSet algorithm
+ *
+ * @param 32bit variable to find first set
+ * @param 32bit variable to compare with first one
+ *
+ * @return Counter to the first set bit
+ */
+uint32_t Schdlr_uwfnFindFirstSet(uint32_t uwTaskPriorty, uint32_t uwTaskStatus)
+{
+	if (!uwTaskPriorty)
+	{
+		return ERROR_TASKPRIORITY;
+	}
+	uint32_t uwTempMask = HIGHEST_PRIORITY_BIT;
+	uint8_t uwReturnNxtTask = 0;
+	while(!(uwTaskPriorty & uwTempMask & uwTaskStatus))
+	{
+		uwTempMask = (uwTempMask >> 1);
+		uwReturnNxtTask++;
+	}
+
+	return uwReturnNxtTask;
 }

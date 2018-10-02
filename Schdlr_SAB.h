@@ -22,6 +22,7 @@ typedef enum{
 	Schdlr_Ret_True = 1
 }SchdlrRetStatus_t;
 
+/*! @brief  Use this to set task priority or task status. */
 typedef enum TaskPriority{
 	Task_Priority_0 = (1<<0),
 	Task_Priority_1 = (1<<1),
@@ -74,6 +75,6 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreateBlocked(void (*vpfnhandler)(void *vpParams
 									   uint32_t uwStackSize,
 									   uint32_t uwPriority);
 void Schdlr_xfnTaskYield(void);
-
+void Schdlr_xfnTaskBlock(uint32_t uwTaskToBlock);
 
 #endif /* SCHDLR_SAB_H_ */
