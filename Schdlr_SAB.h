@@ -9,12 +9,24 @@
 #define SCHDLR_SAB_H_
 
 #include "MKL25Z4.h"
+#include <string.h>
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+/*! @brief  Schdlr Configurations. */
 #define SCHDLR_CONFIG_MAX_TASKS	32
 #define TASK_STACK_SIZE			64
+
+/*! @brief  Enables SysTick Features if defined. */
+#define SYSTICK_FEAT
+//#undef	SYSTICK_FEAT
+
+/*! @brief  Schdlr Tick, don't mess up. */
+#define CORE_CLOCK (48000000UL)
+#define	SYSTICK_FREQ (200UL)
+#define MAX_TIMERS	SCHDLR_CONFIG_MAX_TASKS
+
 
 /*! @brief  Schdlr status return codes. */
 typedef enum{
@@ -22,7 +34,7 @@ typedef enum{
 	Schdlr_Ret_True = 1
 }SchdlrRetStatus_t;
 
-/*! @brief  Use this to set task priority or task status. */
+/*! @brief  Use this to set task priority. */
 typedef enum TaskPriority{
 	Task_Priority_0 = (1<<0),
 	Task_Priority_1 = (1<<1),
@@ -55,7 +67,7 @@ typedef enum TaskPriority{
 	Task_Priority_28 = (1<<28),
 	Task_Priority_29 = (1<<29),
 	Task_Priority_30 = (1<<30),
-	Task_Priority_31 = (1<<31)
+	Task_Priority_31 = (1<<31) /* Reserved for TaskIdle*/
 }TaskPriority_t;
 
 typedef unsigned long SchdlrPriority;
@@ -75,6 +87,11 @@ SchdlrRetStatus_t Schdlr_xfnTaskCreateBlocked(void (*vpfnhandler)(void *vpParams
 									   uint32_t uwStackSize,
 									   uint32_t uwPriority);
 void Schdlr_xfnTaskYield(void);
-void Schdlr_xfnTaskBlock(uint32_t uwTaskToBlock);
+void Schdlr_xfnTaskBlocked(void);
+void Schdlr_xfnTaskReady(uint32_t uwTaskToReady);
+void Schdlr_vfnTaskDelay(uint32_t uwDelay_ms);
+uint32_t Schdlr_uwfnGetTaskMask(uint32_t uwTaskNumber);
+
+
 
 #endif /* SCHDLR_SAB_H_ */
